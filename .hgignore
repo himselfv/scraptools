@@ -1,0 +1,9 @@
+syntax:glob
+
+# Data
+scrapbook.rdf
+data/*
+outp/*
+
+# Binary
+*.pyc
