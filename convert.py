@@ -7,6 +7,9 @@ import rdflib
 import logging
 import lxml.html
 
+# TODO: notex
+# TODO: saved sites
+
 logging.basicConfig()
 
 parser = argparse.ArgumentParser(description="Works with scrapbook.rdf")
