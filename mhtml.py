@@ -43,15 +43,17 @@ class MHTML(object):
 
 		# Walk current directory.
 		for (root, _, files) in os.walk(folder):
+			relroot = os.path.relpath(root, folder)
+			
 			# Create message part from each file and attach them to archive.
 			for f in files:
-				p = os.path.join(root, f).lstrip("./")
 				m = email.message.Message()
 				# Encode and set type of part.
 				t = mimetypes.guess_type(f)[0]
 				if t:
 					m["Content-Type"] = t
 
+				p = os.path.join(root, f).lstrip("./")
 				# At this point nothing is encodede as quoted-printable
 				# because we can't tell the source encoding => can't load (defaults to ASCII) to recode
 				#if t and t.startswith("text/"):
@@ -59,15 +61,15 @@ class MHTML(object):
 				#	payl = codecs.open(p, "rt").read()
 				#	m.set_payload(quopri.encodestring(payl.encode("utf-8")).decode("ascii")) #??? WTF?
 				#else:
-					m["Content-Transfer-Encoding"] = "base64"
-					m.set_payload(base64.b64encode(open(p, "rb").read()).decode("ascii"))
+				m["Content-Transfer-Encoding"] = "base64"
+				m.set_payload(base64.b64encode(open(p, "rb").read()).decode("ascii"))
 
 				# Only set charset for index.html to UTF-8, and no location.
 				if f == "index.html":
 					m.add_header("Content-Type", "text/html", charset="utf-8")
 					#??? m.set_charset("utf-8")
 				else:
-					m["Content-Location"] = p
+					m["Content-Location"] = os.path.join(relroot, f).lstrip("./\\")
 				self.content.attach(m)
 	
 	def to_folder(self, folder, overwrite = False):
