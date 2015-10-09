@@ -141,6 +141,10 @@ if lost_items > 0:
 	print "Lost items: "+str(lost_items)
 
 
+def subfiles(a_dir):
+    return [name for name in os.listdir(a_dir)
+            if os.path.isfile(os.path.join(a_dir, name))]
+
 def subdirs(a_dir):
     return [name for name in os.listdir(a_dir)
             if os.path.isdir(os.path.join(a_dir, name))]
@@ -153,7 +157,12 @@ def fix_lost_folders():
 		if dir in items: continue
 		if args.verbose: print "Found lost folder: %s" % dir
 		node = Node(dir, None)
-		node.type = ""
+		# try to guess the node type
+		files = subfiles('.\\data\\'+dir)
+		if (len(files) == 1) and (files[0].lower() == 'index.html'):
+			node.type = "note"
+		else:
+			node.type = ""
 		root.children += [node]
 		lost_folders += 1
 	return lost_folders
