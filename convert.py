@@ -8,6 +8,9 @@ import logging
 import lxml.html
 import mhtml
 
+# TODO: Save additional MHT properties inside MHT
+# TODO: Icon property often references files inside data/[id]/, make relative
+
 logging.basicConfig()
 
 parser = argparse.ArgumentParser(description="Works with scrapbook.rdf")
@@ -264,7 +267,9 @@ def convert_node(node, output_dir):
 			desc.close()
 
 	else: # saved document or notex
-		mhtml.mht_pack('data\\'+node.id, output_dir+'\\'+nodename+'.mht')
+		mht = mhtml.MHTML()
+		mht.from_folder('data\\'+node.id)
+		mht.save_to_file(output_dir+'\\'+nodename+'.mht')
 		
 		customtitle = unicode(node.name) if unicode(node.name) != nodename else None
 		comment = node.comment
