@@ -6,9 +6,7 @@ import shutil
 import rdflib
 import logging
 import lxml.html
-
-# TODO: notex
-# TODO: saved sites
+import mhtml
 
 logging.basicConfig()
 
@@ -17,6 +15,7 @@ parser.add_argument("--dumpitems", action='store_true', help="dump flat item lis
 parser.add_argument("--dumpprops", type=str, help="dump flat property list for this item")
 parser.add_argument("--item", type=str, help="print this items' properties")
 parser.add_argument("--convert", type=str, help="convert to text files and place in this folder")
+parser.add_argument("--verbose", action='store_true', help="print detailed status messages")
 args = parser.parse_args()
 
 
@@ -26,11 +25,13 @@ NS1 = rdflib.Namespace("http://amb.vis.ne.jp/mozilla/scrapbook-rdf#")
 NC = rdflib.Namespace("http://home.netscape.com/NC-rdf#")
 
 
+if args.verbose: print "Loading scrapbook.rdf..."
 g = rdflib.Graph()
 g.parse("scrapbook.rdf")
 
 
 # Read into a flat 2-level item[].property[] list
+if args.verbose: print "Reading items..."
 items = dict()
 for itemname, propname, value in g:
 	itemname = itemname.toPython() # to string, or triggers strange behavior
@@ -63,7 +64,23 @@ class Node(object):
 		self.item = item
 		self.children = []
 		self.type = ""
-		self.name = item.get('NS1:title', '') # root has no title
+		if item is not None:
+			self.name = item.get('NS1:title', '') # root has no title
+		else:
+			self.name = id
+	
+	@property
+	def comment(self):
+		return unicode(self.item.get('NS1:comment', '')) if self.item is not None else ''
+	
+	@property
+	def source(self):
+		return unicode(self.item.get('NS1:source', '')) if self.item is not None else ''
+
+	@property
+	def icon(self):
+		return unicode(self.item.get('NS1:icon', '')) if self.item is not None else ''
+
 
 def load_node(id, item):
 	if 'node' in item:
@@ -101,18 +118,47 @@ def load_node(id, item):
 	item['node'] = node # set backreference
 	return node
 
-
+if args.verbose: print "Building tree..."
 items['urn:scrapbook:root']['NS1:type']='folder' # force explicit
 root = load_node('', items['urn:scrapbook:root'])
 
 
-lost_items = 0
-for key, item in items.iteritems():
-	if item['node'] is None:
-		lost_items += 1
-		root.children += [load_node(key, item)]
+# Attaches all items without a parent to a root folder
+def fix_lost_items():
+	global items, root
+	lost_items = 0
+	for key, item in items.iteritems():
+		if item['node'] is None:
+			lost_items += 1
+			root.children += [load_node(key, item)]
+	return lost_items
+
+lost_items = fix_lost_items()
 if lost_items > 0:
 	print "Lost items: "+str(lost_items)
+
+
+def subdirs(a_dir):
+    return [name for name in os.listdir(a_dir)
+            if os.path.isdir(os.path.join(a_dir, name))]
+
+# Adds an entry for every data directory lacking an entry
+def fix_lost_folders():
+	global items, root, args
+	lost_folders = 0
+	for dir in subdirs('.\\data'):
+		if dir in items: continue
+		if args.verbose: print "Found lost folder: %s" % dir
+		node = Node(dir, None)
+		node.type = ""
+		root.children += [node]
+		lost_folders += 1
+	return lost_folders
+
+lost_folders = fix_lost_folders()
+if lost_folders > 0:
+	print "Lost folders: "+str(lost_folders)
+
 
 
 # Printing
@@ -149,6 +195,9 @@ def neuter_name(name):
     return name
 
 def convert_node(node, output_dir):
+	global args
+	if args.verbose: print "Converting %s..." % node.id
+	
 	nodename = neuter_name(node.name).strip()
 	if nodename == '':
 		nodename = node.id # guaranteed to be safe
@@ -168,9 +217,9 @@ def convert_node(node, output_dir):
 		desc.close()
 		
 		customtitle = unicode(node.name) if unicode(node.name) != nodename else None
-		comment = unicode(node.item.get('NS1:comment', ''))
-		source = unicode(node.item.get('NS1:source', ''))
-		icon = unicode(node.item.get('NS1:icon', ''))
+		comment = node.comment
+		source = node.source
+		icon = node.icon
 		
 		if customtitle or comment or source or icon:
 			# see https://msdn.microsoft.com/en-us/library/windows/desktop/cc144102%28v=vs.85%29.aspx
@@ -203,9 +252,9 @@ def convert_node(node, output_dir):
 
 		# Notes don't need customtitle: they always use first line as title
 		# They also can't have custom icon/source, but we'll keep the option just in case
-		comment = unicode(node.item.get('NS1:comment', ''))
-		source = unicode(node.item.get('NS1:source', ''))
-		icon = unicode(node.item.get('NS1:icon', ''))
+		comment = node.comment
+		source = node.source
+		icon = node.icon
 		
 		if comment or source or icon:
 			desc = codecs.open(output_dir+'\\'+nodename+'.dat', 'w', 'utf-16')
@@ -214,8 +263,21 @@ def convert_node(node, output_dir):
 			if icon: desc.write('Icon='+icon+'\r\n')
 			desc.close()
 
-	else: # saved document
-		pass # TODO: copy files, export properties
+	else: # saved document or notex
+		mhtml.mht_pack('data\\'+node.id, output_dir+'\\'+nodename+'.mht')
+		
+		customtitle = unicode(node.name) if unicode(node.name) != nodename else None
+		comment = node.comment
+		source = node.source
+		icon = node.icon
+		
+		if customtitle or comment or source or icon:
+			desc = codecs.open(output_dir+'\\'+nodename+'.dat', 'w', 'utf-16')
+			if customtitle: desc.write('Title='+customtitle+'\r\n')
+			if comment: desc.write('Comment='+comment+'\r\n')
+			if source: desc.write('Source='+source+'\r\n')
+			if icon: desc.write('Icon='+icon+'\r\n')
+			desc.close()
 
 
 if args.convert is not None:
