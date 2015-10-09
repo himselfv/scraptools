@@ -15,6 +15,7 @@ import email, email.message
 import mimetypes
 import codecs
 import quopri
+import urlparse
 import sys
 import argparse
 
@@ -22,6 +23,7 @@ import argparse
 class MHTML(object):
 	def __init__(self):
 		self.content = None
+		self.content_location = "" # set to prepend to all locations
 		pass
 	
 	@property
@@ -69,7 +71,8 @@ class MHTML(object):
 					m.add_header("Content-Type", "text/html", charset="utf-8")
 					#??? m.set_charset("utf-8")
 				else:
-					m["Content-Location"] = os.path.join(relroot, f).lstrip("./\\")
+					relpath = os.path.join(relroot, f).replace('\\', '/')
+					m["Content-Location"] = urlparse.urljoin(self.content_location, relpath).lstrip("./\\")
 				self.content.attach(m)
 	
 	def to_folder(self, folder, overwrite = False):

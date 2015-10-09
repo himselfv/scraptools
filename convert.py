@@ -8,9 +8,6 @@ import logging
 import lxml.html
 import mhtml
 
-# TODO: Icon property often references files inside data/[id]/, make relative
-# TODO: If icon == favicon.ico, do not store. Assume favicon.ico by default (to support foreign MHTs)
-
 logging.basicConfig()
 
 parser = argparse.ArgumentParser(description="Works with scrapbook.rdf")
@@ -21,6 +18,8 @@ parser.add_argument("--convert", type=str, help="convert to text files and place
 parser.add_argument("--verbose", action='store_true', help="print detailed status messages")
 args = parser.parse_args()
 
+
+# TODO: date fields (create / modify): parse; store as available
 
 # namespaces
 RDF = rdflib.Namespace("http://www.w3.org/1999/02/22-rdf-syntax-ns#")
@@ -83,6 +82,15 @@ class Node(object):
 	@property
 	def icon(self):
 		return unicode(self.item.get('NS1:icon', '')) if self.item is not None else ''
+
+	@property
+	def create(self):
+		return unicode(self.item.get('NS1:create', '')) if self.item is not None else ''
+
+	@property
+	def modify(self):
+		return unicode(self.item.get('NS1:modify', '')) if self.item is not None else ''
+
 
 
 def load_node(id, item):
@@ -219,6 +227,10 @@ def convert_node(node, output_dir):
 	comment = node.comment
 	source = node.source
 	icon = node.icon
+	if icon.startswith('resource://scrapbook/data/'+node.id+'/'):
+		icon = icon[len('resource://scrapbook/data/'+node.id+'/'):]
+	create = node.create
+	modify = node.modify
 
 	if node.type == 'folder':
 		if node.name == "": # special case: root folder
@@ -274,13 +286,20 @@ def convert_node(node, output_dir):
 	else: # saved document or notex
 		# Store as .mht
 		mht = mhtml.MHTML()
+		mht.content_location = "" # do not store absolute locations
 		mht.from_folder('data\\'+node.id)
 
-		# Store additional properties as custom MHT headers
-		if customtitle: mht.content['Title'] = customtitle
-		if comment: mht.content['Comment'] = comment
-		if source: mht.content['Source'] = source
-		if icon: mht.content['Icon'] = icon
+		# Store additional properties as appropriate standard headers
+		if customtitle: mht.content['Subject'] = customtitle
+		if comment: mht.content['Comments'] = comment
+		if source: mht.content['Content-Location'] = source
+		# favicon.ico is assumed by default: this way foreign .mht has a chance at having an icon too
+		if icon and (icon != 'favicon.ico'): mht.content['Icon'] = icon
+		
+		# Has additional properties
+		# NS1:create="20150909122950"  -- "Date" header?
+        # NS1:modify="20150909122950"
+        # NS1:lock
 
 		mht.save_to_file(output_dir+'\\'+nodename+'.mht')
 
