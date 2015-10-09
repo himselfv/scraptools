@@ -8,8 +8,8 @@ import logging
 import lxml.html
 import mhtml
 
-# TODO: Save additional MHT properties inside MHT
 # TODO: Icon property often references files inside data/[id]/, make relative
+# TODO: If icon == favicon.ico, do not store. Assume favicon.ico by default (to support foreign MHTs)
 
 logging.basicConfig()
 
@@ -206,6 +206,11 @@ def convert_node(node, output_dir):
 		nodename = node.id # guaranteed to be safe
 	# remember to store original name as "customized" if neuter changed it
 
+	customtitle = unicode(node.name) if unicode(node.name) != nodename else None
+	comment = node.comment
+	source = node.source
+	icon = node.icon
+
 	if node.type == 'folder':
 		if node.name == "": # special case: root folder
 			node_dir = output_dir
@@ -218,11 +223,6 @@ def convert_node(node, output_dir):
 		for subnode in node.children:
 			desc.write(subnode.name+"\r\n")
 		desc.close()
-		
-		customtitle = unicode(node.name) if unicode(node.name) != nodename else None
-		comment = node.comment
-		source = node.source
-		icon = node.icon
 		
 		if customtitle or comment or source or icon:
 			# see https://msdn.microsoft.com/en-us/library/windows/desktop/cc144102%28v=vs.85%29.aspx
@@ -255,10 +255,6 @@ def convert_node(node, output_dir):
 
 		# Notes don't need customtitle: they always use first line as title
 		# They also can't have custom icon/source, but we'll keep the option just in case
-		comment = node.comment
-		source = node.source
-		icon = node.icon
-		
 		if comment or source or icon:
 			desc = codecs.open(output_dir+'\\'+nodename+'.dat', 'w', 'utf-16')
 			if comment: desc.write('Comment='+comment+'\r\n')
@@ -267,22 +263,17 @@ def convert_node(node, output_dir):
 			desc.close()
 
 	else: # saved document or notex
+		# Store as .mht
 		mht = mhtml.MHTML()
 		mht.from_folder('data\\'+node.id)
+
+		# Store additional properties as custom MHT headers
+		if customtitle: mht.content['Title'] = customtitle
+		if comment: mht.content['Comment'] = comment
+		if source: mht.content['Source'] = source
+		if icon: mht.content['Icon'] = icon
+
 		mht.save_to_file(output_dir+'\\'+nodename+'.mht')
-		
-		customtitle = unicode(node.name) if unicode(node.name) != nodename else None
-		comment = node.comment
-		source = node.source
-		icon = node.icon
-		
-		if customtitle or comment or source or icon:
-			desc = codecs.open(output_dir+'\\'+nodename+'.dat', 'w', 'utf-16')
-			if customtitle: desc.write('Title='+customtitle+'\r\n')
-			if comment: desc.write('Comment='+comment+'\r\n')
-			if source: desc.write('Source='+source+'\r\n')
-			if icon: desc.write('Icon='+icon+'\r\n')
-			desc.close()
 
 
 if args.convert is not None:
