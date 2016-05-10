@@ -16,6 +16,7 @@ parser.add_argument("--dumpprops", type=str, help="dump flat property list for t
 parser.add_argument("--item", type=str, help="print this items' properties")
 parser.add_argument("--convert", type=str, help="convert to text files and place in this folder")
 parser.add_argument("--verbose", action='store_true', help="print detailed status messages")
+parser.add_argument("--nomht", action='store_true', help="store saved pages as folders instead of MHT")
 args = parser.parse_args()
 
 
@@ -284,24 +285,44 @@ def convert_node(node, output_dir):
 			desc.close()
 
 	else: # saved document or notex
-		# Store as .mht
-		mht = mhtml.MHTML()
-		mht.content_location = "" # do not store absolute locations
-		mht.from_folder('data\\'+node.id)
+		if args.nomht:
+			if nodename.endswith('.'):
+				customtitle = nodename
+				nodename = nodename.rstrip('.')
+				if nodename == '':
+					nodename = node.id # keep as is, whatever
+			
+			if os.path.exists('data\\'+node.id): # must be a folder
+				shutil.copytree('data\\'+node.id, output_dir+'\\'+nodename)
+			else:
+				os.mkdir(output_dir+'\\'+nodename)
+			if customtitle or comment or source or icon:
+				desc = codecs.open(output_dir+'\\'+nodename+'\\index', 'w', 'utf-16')
+				if customtitle: desc.write('Title='+customtitle+'\r\n')
+				if comment: desc.write('Comment='+comment+'\r\n')
+				if source: desc.write('Source='+source+'\r\n')
+				if icon: desc.write('Icon='+icon+'\r\n')
+				desc.close()
+			
+		else:
+			# Store as .mht
+			mht = mhtml.MHTML()
+			mht.content_location = "" # do not store absolute locations
+			mht.from_folder('data\\'+node.id)
 
-		# Store additional properties as appropriate standard headers
-		if customtitle: mht.content['Subject'] = customtitle
-		if comment: mht.content['Comments'] = comment
-		if source: mht.content['Content-Location'] = source
-		# favicon.ico is assumed by default: this way foreign .mht has a chance at having an icon too
-		if icon and (icon != 'favicon.ico'): mht.content['Icon'] = icon
-		
-		# Has additional properties
-		# NS1:create="20150909122950"  -- "Date" header?
-        # NS1:modify="20150909122950"
-        # NS1:lock
+			# Store additional properties as appropriate standard headers
+			if customtitle: mht.content['Subject'] = customtitle
+			if comment: mht.content['Comments'] = comment
+			if source: mht.content['Content-Location'] = source
+			# favicon.ico is assumed by default: this way foreign .mht has a chance at having an icon too
+			if icon and (icon != 'favicon.ico'): mht.content['Icon'] = icon
+			
+			# Has additional properties
+			# NS1:create="20150909122950"  -- "Date" header?
+	        # NS1:modify="20150909122950"
+	        # NS1:lock
 
-		mht.save_to_file(output_dir+'\\'+nodename+'.mht')
+			mht.save_to_file(output_dir+'\\'+nodename+'.mht')
 
 
 if args.convert is not None:
