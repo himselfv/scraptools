@@ -16,7 +16,7 @@ parser.add_argument("--dumpprops", type=str, help="dump flat property list for t
 parser.add_argument("--item", type=str, help="print this items' properties")
 parser.add_argument("--convert", type=str, help="convert to text files and place in this folder")
 parser.add_argument("--verbose", action='store_true', help="print detailed status messages")
-parser.add_argument("--nomht", action='store_true', help="store saved pages as folders instead of MHT")
+parser.add_argument("--mht", action='store_true', help="store saved pages as MHT instead of folders")
 args = parser.parse_args()
 
 
@@ -215,6 +215,21 @@ def neuter_name(name):
         name = name.replace(char, '')
     return name
 
+# Writes additional properties for a folder-like item to desktop.ini
+def write_desktop_ini(folder, title, comment, source, icon):
+	# see https://msdn.microsoft.com/en-us/library/windows/desktop/cc144102%28v=vs.85%29.aspx
+	desc = codecs.open(folder+'\\desktop.ini', 'w', 'utf-16') # encoding supported by windows
+	if title or source or icon:
+		desc.write('[Scrapbook]\r\n')
+		if title: desc.write('Title='+title+'\r\n')
+		if source: desc.write('Source='+source+'\r\n')
+		if icon: desc.write('Icon='+icon+'\r\n')
+		desc.write('\r\n')
+	if comment: # also write Windows-compatible version
+		desc.write('[.ShellClassInfo]\r\n')
+		desc.write('InfoTip='+comment+'\r\n')
+	desc.close()
+
 def convert_node(node, output_dir):
 	global args
 	if args.verbose: print "Converting %s..." % node.id
@@ -247,18 +262,7 @@ def convert_node(node, output_dir):
 		desc.close()
 		
 		if customtitle or comment or source or icon:
-			# see https://msdn.microsoft.com/en-us/library/windows/desktop/cc144102%28v=vs.85%29.aspx
-			desc = codecs.open(node_dir+'\\desktop.ini', 'w', 'utf-16') # encoding supported by windows
-			if customtitle or source or icon:
-				desc.write('[Scrapbook]\r\n')
-				if customtitle: desc.write('Title='+customtitle+'\r\n')
-				if source: desc.write('Source='+source+'\r\n')
-				if icon: desc.write('Icon='+icon+'\r\n')
-				desc.write('\r\n')
-			if comment: # also write Windows-compatible version
-				desc.write('[.ShellClassInfo]\r\n')
-				desc.write('InfoTip='+comment+'\r\n')
-			desc.close()
+			write_desktop_ini(node_dir, customtitle, comment, source, icon)
 
 		for subnode in node.children:
 			convert_node(subnode, node_dir)
@@ -285,26 +289,7 @@ def convert_node(node, output_dir):
 			desc.close()
 
 	else: # saved document or notex
-		if args.nomht:
-			if nodename.endswith('.'):
-				customtitle = nodename
-				nodename = nodename.rstrip('.')
-				if nodename == '':
-					nodename = node.id # keep as is, whatever
-			
-			if os.path.exists('data\\'+node.id): # must be a folder
-				shutil.copytree('data\\'+node.id, output_dir+'\\'+nodename)
-			else:
-				os.mkdir(output_dir+'\\'+nodename)
-			if customtitle or comment or source or icon:
-				desc = codecs.open(output_dir+'\\'+nodename+'\\index', 'w', 'utf-16')
-				if customtitle: desc.write('Title='+customtitle+'\r\n')
-				if comment: desc.write('Comment='+comment+'\r\n')
-				if source: desc.write('Source='+source+'\r\n')
-				if icon: desc.write('Icon='+icon+'\r\n')
-				desc.close()
-			
-		else:
+		if args.mht:
 			# Store as .mht
 			mht = mhtml.MHTML()
 			mht.content_location = "" # do not store absolute locations
@@ -323,6 +308,20 @@ def convert_node(node, output_dir):
 	        # NS1:lock
 
 			mht.save_to_file(output_dir+'\\'+nodename+'.mht')
+		else:
+			# Store as folder
+			if nodename.endswith('.'):
+				customtitle = nodename
+				nodename = nodename.rstrip('.')
+				if nodename == '':
+					nodename = node.id # keep as is, whatever
+			
+			if os.path.exists('data\\'+node.id): # must be a folder
+				shutil.copytree('data\\'+node.id, output_dir+'\\'+nodename)
+			else:
+				os.mkdir(output_dir+'\\'+nodename)
+			if customtitle or comment or source or icon:
+				write_desktop_ini(output_dir+'\\'+nodename, customtitle, comment, source, icon)
 
 
 if args.convert is not None:
