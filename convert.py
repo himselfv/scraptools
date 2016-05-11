@@ -229,6 +229,11 @@ def write_desktop_ini(folder, title, comment, source, icon):
 		desc.write('[.ShellClassInfo]\r\n')
 		desc.write('InfoTip='+comment+'\r\n')
 	desc.close()
+	
+	# Set system and hidden attributes to tell Windows to read desktop.ini
+	import win32con, win32api, os
+	short_unc = win32api.GetShortPathName(folder) # SetFileAttributes fails on some longer/non-unicode names
+	win32api.SetFileAttributes(short_unc, win32con.FILE_ATTRIBUTE_SYSTEM or win32con.FILE_ATTRIBUTE_HIDDEN)
 
 def convert_node(node, output_dir):
 	global args
