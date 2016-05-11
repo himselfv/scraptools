@@ -219,7 +219,7 @@ def neuter_name(name):
 def write_desktop_ini(folder, title, comment, source, icon):
 	# see https://msdn.microsoft.com/en-us/library/windows/desktop/cc144102%28v=vs.85%29.aspx
 	desc = codecs.open(folder+'\\desktop.ini', 'w', 'utf-16') # encoding supported by windows
-	if title or source or icon:
+	if source:
 		desc.write('[Scrapbook]\r\n')
 		if source: desc.write('Source='+source+'\r\n')
 		desc.write('\r\n')
