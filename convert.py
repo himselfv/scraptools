@@ -221,13 +221,13 @@ def write_desktop_ini(folder, title, comment, source, icon):
 	desc = codecs.open(folder+'\\desktop.ini', 'w', 'utf-16') # encoding supported by windows
 	if title or source or icon:
 		desc.write('[Scrapbook]\r\n')
-		if title: desc.write('Title='+title+'\r\n')
 		if source: desc.write('Source='+source+'\r\n')
-		if icon: desc.write('Icon='+icon+'\r\n')
 		desc.write('\r\n')
-	if comment: # also write Windows-compatible version
+	if title or comment or icon: # also write Windows-compatible version
 		desc.write('[.ShellClassInfo]\r\n')
-		desc.write('InfoTip='+comment+'\r\n')
+		if title: desc.write('LocalizedResourceName='+title+'\r\n')
+		if comment: desc.write('InfoTip='+comment+'\r\n')
+		if icon: desc.write('IconResource='+icon+'\r\n')
 	desc.close()
 	
 	# Set system and hidden attributes to tell Windows to read desktop.ini
