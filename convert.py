@@ -17,6 +17,7 @@ parser.add_argument("--item", type=str, help="print this items' properties")
 parser.add_argument("--convert", type=str, help="convert to text files and place in this folder")
 parser.add_argument("--verbose", action='store_true', help="print detailed status messages")
 parser.add_argument("--mht", action='store_true', help="store saved pages as MHT instead of folders")
+parser.add_argument("--local-props", action='store_true', help="for properties which could not have been stored internally in the file format, store them in an additional file instead of just in the directory index")
 args = parser.parse_args()
 
 
@@ -60,38 +61,57 @@ for itemname, propname, value in g:
 	#print itemname, propname
 
 
+
 # Turn into a tree
+
+# Makes a string suitable to be file name + id (no equality signs)
+def neuter_name(name):
+    reserved_chars ='\\/:*?"<>|='
+    for char in reserved_chars:
+        name = name.replace(char, '')
+    return name
+
+class Prop(object):
+	def __init__(self, name, value):
+		self.name = name
+		self.value = value
+
 class Node(object):
 	def __init__(self, id, item):
+		# This can be created with item==None, for lost folders
 		self.id = id
-		self.item = item
 		self.children = []
-		self.type = ""
+		
+		self.type = unicode(item['NS1:type']) if item is not None else ''
+		
 		if item is not None:
-			self.name = item.get('NS1:title', '') # root has no title
+			title = unicode(item.get('NS1:title', '')) # root has no title
 		else:
-			self.name = id
-	
-	@property
-	def comment(self):
-		return unicode(self.item.get('NS1:comment', '')) if self.item is not None else ''
-	
-	@property
-	def source(self):
-		return unicode(self.item.get('NS1:source', '')) if self.item is not None else ''
+			title = id
+		
+		# Name is a neutered title, suitable for use as filename and ini-id
+		self.name = neuter_name(title).strip()
+		# Folders in Windows fail when name ends with dots
+		# We could've tested for type==folder, but some other types end up as folders too,
+		# so it's safer to just prohibit this at all.
+		# Spaces too.
+		self.name = self.name.rstrip('. ').lstrip(' ')
+		if self.name == '':
+			self.name = self.id # guaranteed to be safe
 
-	@property
-	def icon(self):
-		return unicode(self.item.get('NS1:icon', '')) if self.item is not None else ''
+		# remember to store original name as "customized" if neuter changed it
+		self.customtitle = title if title != self.name else None
 
-	@property
-	def create(self):
-		return unicode(self.item.get('NS1:create', '')) if self.item is not None else ''
+		self.comment = unicode(item.get('NS1:comment', '')) if item is not None else ''
+		self.source = unicode(item.get('NS1:source', '')) if item is not None else ''
+		self.icon = unicode(item.get('NS1:icon', '')) if item is not None else ''
+		if self.icon.startswith('resource://scrapbook/data/'+self.id+'/'):
+			self.icon = self.icon[len('resource://scrapbook/data/'+self.id+'/'):]
+		
+		self.create = unicode(item.get('NS1:create', '')) if item is not None else ''
+		self.modify = unicode(item.get('NS1:modify', '')) if item is not None else ''
 
-	@property
-	def modify(self):
-		return unicode(self.item.get('NS1:modify', '')) if self.item is not None else ''
-
+		self.props = [] # any additional props this node fails to store internally
 
 
 def load_node(id, item):
@@ -99,8 +119,6 @@ def load_node(id, item):
 		return item['node'] # do not create a second one
 
 	node = Node(id, item)
-
-	node.type = unicode(item['NS1:type'])
 	if node.type == 'folder':
 		idx = 1
 		while 'RDF:_'+str(idx) in item:
@@ -208,26 +226,46 @@ def touch_path(path):
         if exception.errno != errno.EEXIST:
             raise
 
-# Makes a string suitable to be file name
-def neuter_name(name):
-    reserved_chars ='\\/:*?"<>|'
-    for char in reserved_chars:
-        name = name.replace(char, '')
-    return name
+def encode_ini_value(value):
+	return value # TODO: replace CRLF and invalid chars
 
 # Writes additional properties for a folder-like item to desktop.ini
-def write_desktop_ini(folder, title, comment, source, icon):
+def write_desktop_ini(folder, node):
 	# see https://msdn.microsoft.com/en-us/library/windows/desktop/cc144102%28v=vs.85%29.aspx
 	desc = codecs.open(folder+'\\desktop.ini', 'w', 'utf-16') # encoding supported by windows
-	if source:
+	
+	if node.source:
 		desc.write('[Scrapbook]\r\n')
-		if source: desc.write('Source='+source+'\r\n')
+		if node.source: desc.write('Source='+encode_ini_value(node.source)+'\r\n')
 		desc.write('\r\n')
-	if title or comment or icon: # also write Windows-compatible version
+
+	if node.customtitle or node.comment or node.icon: # also write Windows-compatible version
 		desc.write('[.ShellClassInfo]\r\n')
-		if title: desc.write('LocalizedResourceName='+title+'\r\n')
-		if comment: desc.write('InfoTip='+comment+'\r\n')
-		if icon: desc.write('IconResource='+icon+'\r\n')
+		if node.customtitle: desc.write('LocalizedResourceName='+encode_ini_value(node.customtitle)+'\r\n')
+		if node.comment: desc.write('InfoTip='+encode_ini_value(node.comment)+'\r\n')
+		if node.icon: desc.write('IconResource='+encode_ini_value(node.icon)+'\r\n')
+
+	had_props = False
+	if node.children and (len(node.children) > 0):
+		# Write alternative names and children order
+		desc.write('[Scrapbook:Index]\r\n')
+		for subnode in node.children:
+			if subnode.customtitle:
+				desc.write(subnode.name+'='+encode_ini_value(subnode.customtitle)+'\r\n')
+			else:
+				desc.write(subnode.name+"\r\n")
+			if subnode.props:
+				had_props = True
+		desc.write('\r\n')
+
+	if had_props:
+		desc.write('[Scrapbook:Properties]\r\n')
+		for subnode in node.children:
+			if not subnode.props: continue
+			for prop in subnode.props:
+				desc.write(subnode.name+':'+prop.name+'='+encode_ini_value(prop.value)+'\r\n');
+		desc.write('\r\n')
+
 	desc.close()
 	
 	# Set system and hidden attributes to tell Windows to read desktop.ini
@@ -238,39 +276,20 @@ def write_desktop_ini(folder, title, comment, source, icon):
 def convert_node(node, output_dir):
 	global args
 	if args.verbose: print "Converting %s..." % node.id
-	
-	nodename = neuter_name(node.name).strip()
-	if nodename == '':
-		nodename = node.id # guaranteed to be safe
-	# remember to store original name as "customized" if neuter changed it
-
-	customtitle = unicode(node.name) if unicode(node.name) != nodename else None
-	comment = node.comment
-	source = node.source
-	icon = node.icon
-	if icon.startswith('resource://scrapbook/data/'+node.id+'/'):
-		icon = icon[len('resource://scrapbook/data/'+node.id+'/'):]
-	create = node.create
-	modify = node.modify
 
 	if node.type == 'folder':
 		if node.name == "": # special case: root folder
 			node_dir = output_dir
 		else:
-			node_dir = output_dir+'\\'+nodename
+			node_dir = output_dir+'\\'+node.name
 		touch_path(node_dir)
 
-		desc = codecs.open(node_dir+'\\index', 'w', 'utf-8')
-		# Write contents order
-		for subnode in node.children:
-			desc.write(subnode.name+"\r\n")
-		desc.close()
-		
-		if customtitle or comment or source or icon:
-			write_desktop_ini(node_dir, customtitle, comment, source, icon)
-
+		# First convert children, so that they formulate all of their external properties
 		for subnode in node.children:
 			convert_node(subnode, node_dir)
+
+		# Now write full desktop.ini
+		write_desktop_ini(node_dir, node)
 
 	elif node.type == 'note':
 		tree = lxml.html.parse(codecs.open('data\\'+node.id+'\\index.html'))
@@ -280,18 +299,23 @@ def convert_node(node, output_dir):
 		# Text starts on the next line after <pre> tag, so remove one linefeed
 		if text[:1] == '\n': text = text[1:]
 
-		f = codecs.open(output_dir+'\\'+nodename+'.txt', 'w', 'utf16')
+		f = codecs.open(output_dir+'\\'+node.name+'.txt', 'w', 'utf16')
 		f.write(text)
 		f.close()
 
 		# Notes don't need customtitle: they always use first line as title
 		# They also can't have custom icon/source, but we'll keep the option just in case
-		if comment or source or icon:
-			desc = codecs.open(output_dir+'\\'+nodename+'.dat', 'w', 'utf-16')
-			if comment: desc.write('Comment='+comment+'\r\n')
-			if source: desc.write('Source='+source+'\r\n')
-			if icon: desc.write('Icon='+icon+'\r\n')
+		if args.local_props and (node.comment or node.source or node.icon):
+			desc = codecs.open(output_dir+'\\'+node.name+'.dat', 'w', 'utf-16')
+			if node.comment: desc.write('Comment='+node.comment+'\r\n')
+			if node.source: desc.write('Source='+node.source+'\r\n')
+			if node.icon: desc.write('Icon='+node.icon+'\r\n')
 			desc.close()
+		
+		node.props = []
+		if node.comment: node.props.append(Prop('comment', node.comment))
+		if node.source: node.props.append(Prop('source', node.source))
+		if node.icon: node.props.append(Prop('icon', node.icon))
 
 	else: # saved document or notex
 		if args.mht:
@@ -301,32 +325,26 @@ def convert_node(node, output_dir):
 			mht.from_folder('data\\'+node.id)
 
 			# Store additional properties as appropriate standard headers
-			if customtitle: mht.content['Subject'] = customtitle
-			if comment: mht.content['Comments'] = comment
-			if source: mht.content['Content-Location'] = source
+			if node.customtitle: mht.content['Subject'] = node.customtitle
+			if node.comment: mht.content['Comments'] = node.comment
+			if node.source: mht.content['Content-Location'] = node.source
 			# favicon.ico is assumed by default: this way foreign .mht has a chance at having an icon too
-			if icon and (icon != 'favicon.ico'): mht.content['Icon'] = icon
+			if node.icon and (node.icon != 'favicon.ico'): mht.content['Icon'] = node.icon
 			
 			# Has additional properties
 			# NS1:create="20150909122950"  -- "Date" header?
 	        # NS1:modify="20150909122950"
 	        # NS1:lock
 
-			mht.save_to_file(output_dir+'\\'+nodename+'.mht')
+			mht.save_to_file(output_dir+'\\'+node.name+'.mht')
 		else:
 			# Store as folder
-			if nodename.endswith('.'):
-				customtitle = nodename
-				nodename = nodename.rstrip('.')
-				if nodename == '':
-					nodename = node.id # keep as is, whatever
-			
 			if os.path.exists('data\\'+node.id): # must be a folder
-				shutil.copytree('data\\'+node.id, output_dir+'\\'+nodename)
+				shutil.copytree('data\\'+node.id, output_dir+'\\'+node.name)
 			else:
-				os.mkdir(output_dir+'\\'+nodename)
-			if customtitle or comment or source or icon:
-				write_desktop_ini(output_dir+'\\'+nodename, customtitle, comment, source, icon)
+				os.mkdir(output_dir+'\\'+node.name)
+			if node.customtitle or node.comment or node.source or node.icon:
+				write_desktop_ini(output_dir+'\\'+node.name, node)
 
 
 if args.convert is not None:
