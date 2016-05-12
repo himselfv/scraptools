@@ -292,21 +292,31 @@ def convert_node(node, output_dir):
 		write_desktop_ini(node_dir, node)
 
 	elif node.type == 'note':
-		tree = lxml.html.parse(codecs.open('data\\'+node.id+'\\index.html'))
+		tree = lxml.html.parse(open('data\\'+node.id+'\\index.html'))
 		matches = tree.xpath('/html/body/pre')
 		assert(matches[0] is not None)
-		text = matches[0].text_content()
+
+		#Do not use text_content() as it kills any internal tags (even if they're meant to be the content)
+		#due to the way Scrapbook stores those (without html-encoding).
+		
+		#Do not just do:
+		#  text = lxml.etree.tostring(matches[0], encoding=unicode)
+		#As this will also print the tag itself.
+		
+		#Print the text before any children + children itself:
+		text = (matches[0].text or '') + ''.join([lxml.html.tostring(child, encoding=unicode) for child in matches[0].iterdescendants()])
+
 		# Text starts on the next line after <pre> tag, so remove one linefeed
 		if text[:1] == '\n': text = text[1:]
 
-		f = codecs.open(output_dir+'\\'+node.name+'.txt', 'w', 'utf16')
+		f = codecs.open(output_dir+'\\'+node.name+'.txt', 'w', 'utf-8')
 		f.write(text)
 		f.close()
 
 		# Notes don't need customtitle: they always use first line as title
 		# They also can't have custom icon/source, but we'll keep the option just in case
 		if args.local_props and (node.comment or node.source or node.icon):
-			desc = codecs.open(output_dir+'\\'+node.name+'.dat', 'w', 'utf-16')
+			desc = codecs.open(output_dir+'\\'+node.name+'.dat', 'w', 'utf-8')
 			if node.comment: desc.write('Comment='+node.comment+'\r\n')
 			if node.source: desc.write('Source='+node.source+'\r\n')
 			if node.icon: desc.write('Icon='+node.icon+'\r\n')
