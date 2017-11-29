@@ -5,7 +5,7 @@ Python scripts to service Scrapbook X repositories. Scrapbook / Scrapbook X is a
 Currently a single tool:
 
 
-### convert.py ### 
+### convert.py
 
 Converts a Scrapbook X repository to a file/folder tree.
 
