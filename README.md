@@ -17,6 +17,6 @@ Converts a Scrapbook X repository to a file/folder tree.
 
 Also generates directory index files which contain information which could not have been represented natively in the file system:
 
-* Alternate file ordering
+* Alternative file ordering
 
 * Weird file names
