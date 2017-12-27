@@ -13,10 +13,22 @@ Converts a Scrapbook X repository to a file/folder tree.
 
 * Plain notes are converted to text files.
 
-* Web pages are converted to MHT files or individual folders.
+* Enhanced notes and saved web pages are converted to MHT files or individual folders.
 
 Also generates directory index files which contain information which could not have been represented natively in the file system:
 
 * Alternative file ordering
 
 * Weird file names
+
+
+### Howto
+
+This is a python script, you need Python 2.7 to run it. Install it, have it in PATH. It uses rdflib and lxml, run `pip install rdflib lxml` from admin command line once you have Python.
+
+
+Usage: 
+```
+convert.py --from [path to Scrapbook data] --convert [where to place files] --mht
+```
+By default web pages are saved as HTML with resources in their own folders, use `--mht` to turn them into single .mht files instead.
