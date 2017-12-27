@@ -10,13 +10,15 @@ import mhtml
 
 logging.basicConfig()
 
-parser = argparse.ArgumentParser(description="Works with scrapbook.rdf")
+parser = argparse.ArgumentParser(description="Reads Scrapbook/Scrapbook X data and allows to inspect and convert it")
+parser.add_argument("--from", type=str, required=True, dest="from_path", metavar="PATH", help="path to Scrapbook data folder (usually in your Firefox profile)")
+parser.add_argument("--convert", type=str, metavar="FOLDER", help="convert contents to files and folders and place in this folder")
 parser.add_argument("--dumpitems", action='store_true', help="dump flat item list")
 parser.add_argument("--dumpprops", type=str, help="dump flat property list for this item")
 parser.add_argument("--item", type=str, help="print this items' properties")
-parser.add_argument("--convert", type=str, help="convert to text files and place in this folder")
 parser.add_argument("--verbose", action='store_true', help="print detailed status messages")
 args = parser.parse_args()
+print args
 
 
 # TODO: date fields (create / modify): parse; store as available
@@ -29,7 +31,7 @@ NC = rdflib.Namespace("http://home.netscape.com/NC-rdf#")
 
 if args.verbose: print "Loading scrapbook.rdf..."
 g = rdflib.Graph()
-g.parse("scrapbook.rdf")
+g.parse(args.from_path+"/scrapbook.rdf")
 
 
 # Read into a flat 2-level item[].property[] list
@@ -161,12 +163,12 @@ def subdirs(a_dir):
 def fix_lost_folders():
 	global items, root, args
 	lost_folders = 0
-	for dir in subdirs('.\\data'):
+	for dir in subdirs(args.from_path+'\\data'):
 		if dir in items: continue
 		if args.verbose: print "Found lost folder: %s" % dir
 		node = Node(dir, None)
 		# try to guess the node type
-		files = subfiles('.\\data\\'+dir)
+		files = subfiles(args.from_path+'\\data\\'+dir)
 		if (len(files) == 1) and (files[0].lower() == 'index.html'):
 			node.type = "note"
 		else:
@@ -263,7 +265,7 @@ def convert_node(node, output_dir):
 			convert_node(subnode, node_dir)
 
 	elif node.type == 'note':
-		tree = lxml.html.parse(codecs.open('data\\'+node.id+'\\index.html'))
+		tree = lxml.html.parse(codecs.open(args.from_path+'\\data\\'+node.id+'\\index.html'))
 		matches = tree.xpath('/html/body/pre')
 		assert(matches[0] is not None)
 		text = matches[0].text_content()
@@ -287,7 +289,7 @@ def convert_node(node, output_dir):
 		# Store as .mht
 		mht = mhtml.MHTML()
 		mht.content_location = "" # do not store absolute locations
-		mht.from_folder('data\\'+node.id)
+		mht.from_folder(args.from_path+'\\data\\'+node.id)
 
 		# Store additional properties as appropriate standard headers
 		if customtitle: mht.content['Subject'] = customtitle
