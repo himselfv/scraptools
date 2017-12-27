@@ -31,4 +31,9 @@ Usage:
 ```
 convert.py --from [path to Scrapbook data] --convert [where to place files] --mht
 ```
+
+Path to Scrapbook data is usually something like `C:\Users\Your username\AppData\Roaming\Mozilla\Firefox\[Your Firefox profile]\Scrapbook`. Since it's your data, I'd backup it before doing anything, just in case.
+
+Output path is a folder which will be created, populated with converted data.
+
 By default web pages are saved as HTML with resources in their own folders, use `--mht` to turn them into single .mht files instead.
