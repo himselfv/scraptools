@@ -37,3 +37,8 @@ Path to Scrapbook data is usually something like `C:\Users\Your username\AppData
 Output path is a folder which will be created, populated with converted data.
 
 By default web pages are saved as HTML with resources in their own folders, use `--mht` to turn them into single .mht files instead.
+
+
+### License
+
+Licensed under the [MIT License](https://en.wikipedia.org/wiki/MIT_License).
