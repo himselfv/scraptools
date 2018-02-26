@@ -41,4 +41,4 @@ By default web pages are saved as HTML with resources in their own folders, use 
 
 ### License
 
-Licensed under the [MIT License](https://en.wikipedia.org/wiki/MIT_License).
+Licensed under the [MIT License](LICENSE.txt).
